@@ -1,0 +1,36 @@
+rules_version = '2';
+
+// El backend (Admin SDK) siempre tiene acceso total y no pasa por estas reglas.
+// Estas reglas solo protegen el acceso DIRECTO desde el cliente (React),
+// que se usa únicamente para: login (Firebase Auth) y escuchar notificaciones en tiempo real.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function estaAutenticado() {
+      return request.auth != null;
+    }
+
+    // Los usuarios solo pueden leer su propio perfil directamente
+    match /usuarios/{userId} {
+      allow read: if estaAutenticado() && request.auth.uid == userId;
+      allow write: if false; // toda escritura pasa por el backend
+    }
+
+    // Los usuarios solo pueden leer y marcar como leídas SUS propias notificaciones
+    match /notificaciones/{notifId} {
+      allow read: if estaAutenticado() && resource.data.paraUid == request.auth.uid;
+      allow update: if estaAutenticado()
+                    && resource.data.paraUid == request.auth.uid
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['leido']);
+      allow create, delete: if false; // solo el backend crea notificaciones
+    }
+
+    // Casos y comentarios: toda lectura/escritura pasa por el backend (Admin SDK)
+    match /casos/{casoId} {
+      allow read, write: if false;
+      match /comentarios/{comentarioId} {
+        allow read, write: if false;
+      }
+    }
+  }
+}
